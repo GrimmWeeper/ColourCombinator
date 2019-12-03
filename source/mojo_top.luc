@@ -1,0 +1,684 @@
+//Group 3-3 2019
+
+module mojo_top (
+    
+    //ALU computations are done in 16bits, only the 8 LSB are shown on the io_led
+    
+    input clk,              // 50MHz clock
+    input rst_n,            // reset button (active low)
+    input io_button [5],    // 5 buttons on IO Shield
+    input io_dip[3][8],     //serves as inputs. array 2 will be input A values, array 1 will be input B values, array 0 will be ALUFN values
+    
+    
+    output led [8],         // 8 user controllable LEDs
+    output spi_miso,        // AVR SPI MISO
+    output spi_channel [4], // AVR general purpose pins (used by default to select ADC channel)
+    output avr_rx,          // AVR RX (FPGA TX)
+    
+    output io_led [3][8],    // 24 LEDs on IO Shield
+    
+    output io_2seg[8],
+    output io_2sel [4],
+    output io_seg [8],      // 7-segment LEDs on IO Shield
+    output io_sel [4]      // Digit select on IO Shield
+    
+  ) {
+  
+  sig rst;                  // reset signal
+  
+  .clk(clk) {
+    reset_conditioner reset_cond;
+    
+    edge_detector edge_blue1(#RISE(1), #FALL(0)); // detect rising edges
+    edge_detector edge_red1(#RISE(1), #FALL(0)); // detect rising edges
+    edge_detector edge_yellow1(#RISE(1), #FALL(0)); // detect rising edges
+    
+    edge_detector edge_blue2(#RISE(1), #FALL(0)); // detect rising edges
+    edge_detector edge_red2(#RISE(1), #FALL(0)); // detect rising edges
+    edge_detector edge_yellow2(#RISE(1), #FALL(0)); // detect rising edges
+    
+    edge_detector edge_reset(#RISE(1), #FALL(0)); //for reset  
+    button_conditioner button_reset;
+ 
+    button_conditioner button_blue1;     // button input conditioner
+    button_conditioner button_red1;     // button input reset_conditioner
+    button_conditioner button_yellow1;     // button input reset_conditioner
+    
+    button_conditioner button_blue2;     // button input reset_conditioner
+    button_conditioner button_red2;     // button input reset_conditioner
+    button_conditioner button_yellow2;     // button input conditioner
+    
+    .rst(rst){
+      multi_seven_seg seg; // Instantiate both 4 digit-segments LED display module
+      
+      multi_seven_seg seg2;
+ 
+      //imports for 2 player game mode 
+           
+      //questionSelector modules for 2player mode
+      questionselector duoSel1;
+      questionselector duoSel2;
+      
+      // Import pseudo random number generator module
+      pn_gen rand;
+      
+      //counter for 2player mode
+      dff duocounter[30];
+      
+      dff r[8][16]; // r[0]: Player 1 current score, r[1]: Player 2 current score, r[2]: Player 1 streak value
+      //r[3]: Player 2 streak value, r[4]: Player 1 answer, r[5]: Player 2 answer, r[6]: Player 1 temp, r[7]: Player 2 temp
+      
+      dff t[3]; //temp signal to retrieve random number
+      
+      dff duoqc[8]; // Question counter
+      dff duoqnschoice[3]; // Question choice for next round
+      
+      dff duoseed[32]; // 32bits seed
+      
+      
+      //imports for solo player rapid fire mode
+       
+      //CHECK questionSelector module for single player mode (rapid fire)
+      //while timer != time limit, questions will pop out as long as there is an input
+      questionselector soloSel;
+      
+      //CHECK counter for 1 player mode
+
+      dff solocounter[30];  
+      
+      
+      dff p[4][16]; //p[0]: current score, p[1]: streak value, p[2]: answer, p[3]:temp
+      dff soloqc[8]; //8 bits long question counter
+      dff soloqnschoice[3]; //3bits long question choice for the next round
+     
+           
+      
+      //fsm states
+      fsm state = {CHOOSEGAMEMODE,
+              DUOCOMPARE,P1STREAK,P1MULTIPLY,P1SCORE,P2RESET,P2STREAK,P2MULTIPLY,P2SCORE,P1RESET,DUOCHECKEND,DUOSCORE,DUOQNSGEN,
+              SOLOCOMPARE,SOLOSTREAK,SOLOMULTIPLY,SOLOUPDATESTREAK,SOLOSCORE,SOLOCHECKEND,SOLOEND,SOLOQNSGEN};
+     
+  }
+  }
+  const X = 23; // Constant used to control time before transitioning to next state
+  const Y = 10; // Constant used to control ALU computation process
+  
+  const S = 27; //CHECK constant used to track how fast the counter will count
+  
+  //CHECK using external signal to track how long the solo mode will last for
+  //sig solotimer;
+  
+  
+  //internal signals of 16 bits a, b, alu
+  sig alu[16];
+  sig alufn[6];
+  
+  //import ALU module
+  aluCompiled alumodule;
+  
+  //Import binary to decimal module
+  bin_to_dec converterP1 (#DIGITS(3));
+  bin_to_dec converterP2 (#DIGITS(3));
+  
+  
+  //Import counter and decoder module
+  counter color_cycle_cnt (#SIZE(3), #DIV(22), #TOP(6), .clk(clk), .rst(rst));
+  decoder color_cnt_dec (#WIDTH(3), .in(color_cycle_cnt.value));
+  
+ 
+  always {
+  
+    converterP1.value = 16b0;
+    converterP2.value = 16b0;    
+  
+    button_blue1.in = io_dip[2][2];
+    button_red1.in = io_dip[2][1];
+    button_yellow1.in = io_dip[2][0];
+    
+    button_blue2.in = io_dip[1][2];
+    button_yellow2.in = io_dip[1][1];
+    button_red2.in = io_dip[1][0];
+    
+    edge_blue1.in = button_blue1.out;
+    edge_yellow1.in = button_yellow1.out;
+    edge_red1.in = button_red1.out;
+    
+    edge_blue2.in = button_blue2.out;
+    edge_yellow2.in = button_yellow2.out;
+    edge_red2.in = button_red2.out;
+    
+    button_reset.in = io_button[1];
+    edge_reset.in = button_reset.out;
+
+    
+    reset_cond.in = ~rst_n; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset
+    
+    led = 8h00;             // turn LEDs off
+    spi_miso = bz;          // not using SPI
+    spi_channel = bzzzz;    // not using flags
+    avr_rx = bz;            // not using serial port
+    
+    io_2seg = 8hff;
+    io_2sel = 4hf;
+    
+    io_seg = 8hff;          // turn segments off
+    io_sel = 4hf;           // select no digits
+    
+    
+    // Connect both segments to the driver
+    //Connect both digit selects to the driver
+    io_2seg = seg2.seg;
+    io_2sel = ~seg2.sel;
+    
+    io_seg = seg.seg;
+    io_sel = ~seg.sel;
+    
+    // turn off both 4 digits 7-segments display
+    seg.values = {4hf,4hf,4hf,4hf};   
+    seg2.values = {4hf,4hf,4hf,4hf};
+    
+    
+    //Assign 0 to initialise alufn
+    alufn = 6b0;
+    
+    //assigning inputs and outputs of alumodule
+    alumodule.alufn = alufn;
+    alu = alumodule.alu; 
+    alumodule.a = 16b0;
+    alumodule.b = 16b0;
+    
+    
+    //FOR DUO MODE
+    //assigning inputs and outputs of questionSelector module
+    duoSel1.playerSignal = 16b0;
+    duoSel1.questionSelectorSignal = 3b0;
+    
+    duoSel2.playerSignal = 16b0;
+    duoSel2.questionSelectorSignal = 3b0;
+    
+    rand.next = 0;
+    rand.seed = duoseed.q;
+    
+    
+    //FOR SOLO MODE
+    soloSel.playerSignal = 16b0;
+    soloSel.questionSelectorSignal = 3b0;
+    
+    solocounter.d = solocounter.q + 1; 
+
+    
+    //in duo mode:
+    //io_led 0:7 to show colours output
+    //io_led 15:8 to show P2 input value
+    //io_led 23:16 to show P1 input value
+    
+    //in solo mode:
+    //io_led 0:7 to show colours output
+    //io_led 15:8 to show current streak
+    //io_led 23:16 to show current score
+    
+    io_led[2] = 8b0;
+    io_led[1] = 8b0;
+    io_led[0] = 8b0;
+    
+    
+    case(state.q){    
+    
+      state.CHOOSEGAMEMODE:
+      
+        //displays
+        seg.values = {4h0,4h0,4h0,4h0}; //show '000' on both 7 segment display
+        seg2.values = {4h0,4h0,4h0,4h0};
+        
+        //for duo
+        //reset question counter to 0
+        duoqc.d = 0;
+        //assign the value of the first default question
+        duoqnschoice.d = 3b010;
+        
+        r.d[0] = 16b0;
+        r.d[1] = 16b0;
+        r.d[2] = 16b0;
+        r.d[3] = 16b0;
+        r.d[4] = 16b0;
+        r.d[5] = 16b0;
+        r.d[6] = 16b0;
+        r.d[7] = 16b0;
+        
+
+        //CHECK for solo mode
+        //reset question counter to 0;
+        soloqc.d = 0;
+        //assign the value of the first default question  
+        soloqnschoice.d = 3b010;
+        
+        //since the next state trigger is if ans = 1 or ans = 0, the original value of ans should not be 1 or 0
+        p.d[0] = 16b0;
+        p.d[1] = 16b0;
+        p.d[2] = 16b0;
+        p.d[3] = 16b0;
+        
+        //Cycle through the colours
+        io_led[0][0] = color_cnt_dec.out[0];
+        io_led[0][1] = color_cnt_dec.out[4];
+        io_led[0][2] = color_cnt_dec.out[2];
+        io_led[0][3] = color_cnt_dec.out[1];
+        io_led[0][4] = color_cnt_dec.out[5];
+        io_led[0][5] = color_cnt_dec.out[3];
+        io_led[0][6] = color_cnt_dec.out[6];
+        
+        
+        if(io_button[3] == 1){ //CHECK press the left button to enter solo mode  
+          state.d = state.SOLOCOMPARE;
+          solocounter.d = 0;
+        }
+        else if(io_button[4] == 1){ //CHECK press the right button to enter duo mode  
+          state.d = state.DUOCOMPARE;
+          duocounter.d = 0;
+        }
+        
+        
+  
+      //FOR ALL DUO STATES
+      state.DUOCOMPARE: //question will display and the players will answer. states moves on once a correct answer is logged
+
+        duocounter.d = duocounter.q + 1;
+        
+        
+        //display the question LED after taking in the signal
+        duoSel1.questionSelectorSignal = duoqnschoice.q;
+        duoSel2.questionSelectorSignal = duoqnschoice.q;
+        //DISPLAY THE QUESTION
+        io_led[0][0] = duoSel1.redLED;
+        io_led[0][1] = duoSel1.blueLED;
+        io_led[0][2] = duoSel1.yellowLED;
+        io_led[0][3] = duoSel1.orangeLED;
+        io_led[0][4] = duoSel1.purpleLED;
+        io_led[0][5] = duoSel1.greenLED;
+        io_led[0][6] = duoSel1.whiteLED;
+        
+
+        //display the score
+        io_led[2] = r.q[0];
+        io_led[1] = r.q[1];
+        
+        converterP1.value = r.q[0];
+        converterP2.value = r.q[1];
+        
+        seg.values = {4h0,converterP1.digits[0],converterP1.digits[1],converterP1.digits[2]};
+        seg2.values = {4h0,converterP2.digits[0],converterP2.digits[1],converterP2.digits[2]};
+        
+        
+        //both players' manual input
+        duoSel1.playerSignal = io_dip[2][2:0]; // (Blue, Yellow, Red) = (P75,P78,P79)
+        duoSel2.playerSignal = io_dip[1][2:0]; // (Blue, Yellow, Red) = (P105,P111,P112)
+        
+        
+        //Assign score value according to what has been pressed by the players
+        r.d[4] = duoSel1.ans;
+        r.d[5] = duoSel2.ans;
+        
+        
+        if(duocounter.q[X] == 1 && r.q[4] == 1){
+          state.d = state.P1STREAK;
+          duocounter.d = 0;
+        }
+        if(duocounter.q[X] == 1 && r.q[5] == 1){
+          state.d = state.P2STREAK;
+          duocounter.d = 0;
+        }
+        if(duocounter.q[X] == 1 && io_button[1] == 1){
+          state.d = state.DUOSCORE;
+          duocounter.d = 0;
+        }  
+        
+      //fast score computation states                
+      state.P1STREAK:
+      
+        duocounter.d = duocounter.q + 1;
+        
+        // Add to Player 1's streak
+        alumodule.alufn = 6b0;
+        alumodule.a = r.q[2];
+        alumodule.b = r.q[4];
+        r.d[2] = alumodule.alu;
+        
+        if(duocounter.q[Y] == 1){
+          state.d = state.P1MULTIPLY;
+          duocounter.d = 0;
+        }
+        
+        
+      state.P1MULTIPLY:
+      
+        duocounter.d = duocounter.q + 1;
+        
+        // Shift the value '1' by 'STREAK' bits (Generating the value 2^STREAK)
+        alumodule.alufn = 6b100000;
+        alumodule.a = r.q[4];
+        alumodule.b = r.q[2];
+        r.d[6] = alumodule.alu;
+        
+        if(duocounter.q[Y] == 1){
+          state.d = state.P1SCORE;
+          duocounter.d = 0;
+        }
+        
+
+      state.P1SCORE:
+      
+        duocounter.d = duocounter.q + 1;
+        
+        // Add the computed value to Player 1's score
+        alumodule.alufn = 6b0;
+        alumodule.a = r.q[0];
+        alumodule.b = r.q[6];
+        r.d[0] = alumodule.alu;
+        
+        if(duocounter.q[Y] == 1){
+          state.d = state.P2RESET;
+          duocounter.d = 0;
+        }
+        
+        
+      state.P2RESET:
+      
+        duocounter.d = duocounter.q+1;
+        
+        // Reset Player 2's streak
+        alumodule.alufn = 6b000010;
+        alumodule.a = r.q[3];
+        alumodule.b = r.q[5];
+        r.d[3] = alumodule.alu;       
+        
+        if(duocounter.q[Y] == 1){
+          state.d = state.DUOCHECKEND;
+          duocounter.d = 0;
+        }
+ 
+        
+      state.P2STREAK:
+      
+        duocounter.d = duocounter.q + 1;
+        
+        // Add to Player 2's streak
+        alumodule.alufn = 6b0;
+        alumodule.a = r.q[3];
+        alumodule.b = r.q[5];
+        r.d[3] = alumodule.alu;
+        
+        if(duocounter.q[Y] == 1){
+          state.d = state.P2MULTIPLY;
+          duocounter.d = 0;
+        }
+        
+      
+      state.P2MULTIPLY:
+        
+        duocounter.d = duocounter.q + 1;
+        
+        // Shift the value '1' by 'STREAK' bits to the left (Generating the value 2^STREAK)
+        alumodule.alufn = 6b100000;
+        alumodule.a = r.q[5];
+        alumodule.b = r.q[3];
+        r.d[7] = alumodule.alu;
+        
+        if(duocounter.q[Y] == 1){
+          state.d = state.P2SCORE;
+          duocounter.d = 0;
+        }
+        
+        
+      state.P2SCORE:
+      
+        duocounter.d = duocounter.q + 1;
+        
+        // Add the computed value to Player 2's score
+        alumodule.alufn = 6b0;
+        alumodule.a = r.q[1];
+        alumodule.b = r.q[7];
+        r.d[1] = alumodule.alu;
+        
+        if(duocounter.q[Y] == 1){
+          state.d = state.P1RESET;
+          duocounter.d = 0;
+        }
+        
+        
+      state.P1RESET:
+
+        duocounter.d = duocounter.q+1;
+        
+        // Reset Player 1's streak
+        alumodule.alufn = 6b000010;
+        alumodule.a = r.q[2];
+        alumodule.b = r.q[4];
+        r.d[2] = alumodule.alu;
+        
+        if(duocounter.q[Y] == 1){
+          state.d = state.DUOCHECKEND;
+          duocounter.d = 0;
+        }
+                
+               
+      state.DUOCHECKEND: 
+      
+        duocounter.d = duocounter.q+1;
+        
+        if(duocounter.q[Y] == 1 && duoqc.q == 8b0010100){
+          state.d = state.DUOSCORE;
+          duocounter.d = 0;
+        }
+        else if(duocounter.q[Y] == 1){
+          state.d = state.DUOQNSGEN;
+          duocounter.d = 0;
+          duoqc.d = duoqc.q + 8b00000001;
+        }
+        
+      state.DUOSCORE:
+        
+        duocounter.d = duocounter.q+1;
+        
+        //display the score
+        io_led[2] = r.q[0];
+        io_led[1] = r.q[1];
+        
+        converterP1.value = r.q[0];
+        converterP2.value = r.q[1];
+        
+        seg.values = {4h0,converterP1.digits[0],converterP1.digits[1],converterP1.digits[2]};
+        seg2.values = {4h0,converterP2.digits[0],converterP2.digits[1],converterP2.digits[2]};
+        
+        duoseed.d = duoseed.q + 1;
+        
+        if(duocounter.q[X] == 1 && io_button[1] == 1){
+          state.d = state.CHOOSEGAMEMODE;
+          duocounter.d = 0;
+        }
+        
+      state.DUOQNSGEN:
+        
+        duocounter.d = duocounter.q+1;
+        rand.next = 1;
+        t.d = rand.num;
+        
+        
+        if(duocounter.q[X] == 1 && t.q == 3b000) {
+          duocounter.d = 0;
+          duoqnschoice.d = 3b110;
+          state.d = state.DUOCOMPARE;
+        }
+        else if (duocounter.q[X] == 1 && t.q != 3b000) {
+          duocounter.d = 0; 
+          duoqnschoice.d = t.q;       
+          state.d = state.DUOCOMPARE;
+
+        }
+        
+     
+        //CHECK SOLOMODE
+        //SOLOCOMPARE,SOLOSTREAK,SOLOMULTIPLY,SOLOSCORE,SOLOCHECKEND,SOLOEND,SOLOQNSGEN};
+        
+      state.SOLOCOMPARE: 
+      
+        solocounter.d = solocounter.q+1;
+        
+        //get the question and display
+        soloSel.questionSelectorSignal = soloqnschoice.q;
+      
+        io_led[0][0] = soloSel.redLED;
+        io_led[0][1] = soloSel.blueLED;
+        io_led[0][2] = soloSel.yellowLED;
+        io_led[0][3] = soloSel.orangeLED;
+        io_led[0][4] = soloSel.purpleLED;
+        io_led[0][5] = soloSel.greenLED;
+        io_led[0][6] = soloSel.whiteLED;
+        
+
+        //display the score and streak
+        io_led[2] = p.q[0]; //display score
+        io_led[1] = p.q[1]; //display streak
+        
+        converterP1.value = p.q[0];
+        converterP2.value = p.q[1];
+        
+        seg.values = {4h0,converterP1.digits[0],converterP1.digits[1],converterP1.digits[2]};
+        seg2.values = {4h0,converterP2.digits[0],converterP2.digits[1],converterP2.digits[2]};        
+        
+        //solo player manual input
+        soloSel.playerSignal = io_dip[2][2:0]; 
+        
+        //score assigned to what has been pressed
+        p.d[2] = soloSel.ans;       
+        
+        //Correct answer
+        if((p.q[2] == 1)  && solocounter.q[S] != 1){ //as long as the timer is not up and a valid value is read, calculate the score and 
+          state.d = state.SOLOSTREAK;
+          solocounter.d = 0;       
+        }
+        
+        //Miss the time  
+        else if (solocounter.q[S] == 1) {
+          state.d = state.SOLOUPDATESTREAK;
+          solocounter.d = 0;
+        }
+        
+        //RESET
+        if(io_button[1] == 1){
+          state.d = state.SOLOEND;
+          solocounter.d = 0;
+        }
+                    
+      
+      state.SOLOSTREAK: //update streak
+      
+        solocounter.d = solocounter.q + 1;
+      
+        alumodule.alufn = 6b0;
+        alumodule.a = p.q[1];
+        alumodule.b = p.q[2];
+        p.d[1] = alumodule.alu;
+        
+        if(solocounter.q[Y] == 1){
+          state.d = state.SOLOMULTIPLY;
+          solocounter.d = 0;
+        }
+        
+      state.SOLOMULTIPLY: //multiply the streak with the answer
+      
+        solocounter.d = solocounter.q + 1;
+        
+        alumodule.alufn = 6b000010; //using the mul on adder  
+        alumodule.a = p.q[1];
+        alumodule.b = p.q[2];
+        p.d[3] = alumodule.alu;
+        
+        if(solocounter.q[Y] == 1){
+          state.d = state.SOLOSCORE;
+          solocounter.d = 0;
+        }
+        
+        
+      state.SOLOSCORE: //update the score = score + streak
+      
+        solocounter.d = solocounter.q + 1;
+        
+        alumodule.alufn = 6b0;
+        alumodule.a = p.q[0];
+        alumodule.b = p.q[3];
+        p.d[0] = alumodule.alu;
+        
+        if(solocounter.q[Y] == 1){
+          state.d = state.SOLOCHECKEND;
+          solocounter.d = 0;
+        }
+        
+        
+      state.SOLOUPDATESTREAK: //update the streak upon wrong input
+      
+        solocounter.d = solocounter.q + 1;
+        p.d[1] = 16b0;
+        
+        if(solocounter.q[Y] == 1){
+          state.d = state.SOLOCHECKEND;
+          solocounter.d = 0;
+        }
+                
+        
+      state.SOLOCHECKEND:
+           
+        solocounter.d = solocounter.q+1;
+        
+        if(solocounter.q[Y] == 1 && soloqc.q == 8b0010100){
+          state.d = state.SOLOEND;
+          solocounter.d = 0;
+        }
+        else if(solocounter.q[Y] == 1){
+          state.d = state.SOLOQNSGEN;
+          solocounter.d = 0;
+          soloqc.d = soloqc.q + 8b00000001;
+        }
+               
+      state.SOLOQNSGEN:
+      
+        solocounter.d = solocounter.q + 1;
+        rand.next = 1;
+        t.d = rand.num;
+        
+        
+        if(solocounter.q[25] == 1 && t.q == 3b000){
+          solocounter.d = 0;
+          soloqnschoice.d = 3b110;  //orange      
+          state.d = state.SOLOCOMPARE;
+
+        }
+        else if(solocounter.q[25] == 1 && t.q != 3b000){
+          solocounter.d = 0;
+          soloqnschoice.d = t.q;        
+          state.d = state.SOLOCOMPARE;
+
+        }
+        
+      state.SOLOEND: //display the score and reset the timer and counter
+      
+        solocounter.d = solocounter.q + 1;
+        
+        //display the score and streak
+        io_led[2] = p.q[0]; //display score
+
+        converterP1.value = p.q[0];
+        
+        seg.values = {4h0,converterP1.digits[0],converterP1.digits[1],converterP1.digits[2]};
+        
+               
+        if(solocounter.q[X] == 1 && io_button[1] == 1){
+          state.d = state.CHOOSEGAMEMODE;
+          duoseed.d = duoseed.q + 1;
+          solocounter.d =0;
+        }
+
+  }        
+        
+  }
+}

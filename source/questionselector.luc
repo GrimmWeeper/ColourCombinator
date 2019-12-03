@@ -1,0 +1,260 @@
+//group 3-3
+
+
+//With the question values defined, now to define which line is chosen by the player
+//hence the 3 bits here define which is the answer that the player have chosen
+//should give out one bit of answer
+
+module questionselector (
+
+    input questionSelectorSignal[3],
+
+    input playerSignal[3],
+    
+    input rst,
+    
+    input clk,
+    
+    output ans,
+    
+    output redLED, 
+    output blueLED, 
+    output yellowLED, 
+    output orangeLED, 
+    output purpleLED, 
+    output greenLED, 
+    output whiteLED 
+
+  ) {
+  
+  dff red(.clk(clk), .rst(rst));  
+  dff blue(.clk(clk), .rst(rst));
+  dff yellow(.clk(clk), .rst(rst));
+  dff orange(.clk(clk), .rst(rst));
+  dff purple(.clk(clk), .rst(rst));
+  dff green(.clk(clk), .rst(rst));
+  dff white(.clk(clk), .rst(rst));
+  
+  always {
+    
+    case(playerSignal){
+    
+      3b111: ans = white.q;
+      3b001: ans = blue.q;
+      3b010: ans = yellow.q;
+      3b011: ans = green.q;
+      3b100: ans = red.q;
+      3b101: ans = purple.q;
+      3b110: ans = orange.q;
+      3b000: ans = 0; 
+      default: ans = 0;
+    
+  }
+    case(questionSelectorSignal){
+    3b111: //white
+        red.d = 0;
+        redLED = 0;
+        
+        blue.d = 0;
+        blueLED = 0;
+        
+        yellow.d = 0;
+        yellowLED = 0;
+        
+        orange.d = 0;
+        orangeLED = 0;
+        
+        purple.d = 0;
+        purpleLED = 0;
+        
+        green.d = 0;
+        greenLED = 0;
+        
+        white.d = 1;
+        whiteLED = 1;
+      
+        
+      3b001: //blue
+        red.d = 0;
+        redLED = 0;
+        
+        blue.d = 1;
+        blueLED = 1;
+        
+        yellow.d = 0;
+        yellowLED = 0;
+        
+        orange.d = 0;
+        orangeLED = 0;
+        
+        purple.d = 0;
+        purpleLED = 0;
+        
+        green.d = 0;
+        greenLED = 0;
+        
+        white.d = 0;
+        whiteLED = 0;
+        
+      
+      3b010: //yellow
+        red.d = 0;
+        redLED = 0;
+        
+        blue.d = 0;
+        blueLED = 0;
+        
+        yellow.d = 1;
+        yellowLED = 1;
+        
+        orange.d = 0;
+        orangeLED = 0;
+        
+        purple.d = 0;
+        purpleLED = 0;
+        
+        green.d = 0;
+        greenLED = 0;
+        
+        white.d = 0;
+        whiteLED = 0;
+      
+      3b011: //green
+        red.d = 0;
+        redLED = 0;
+        
+        blue.d = 0;
+        blueLED = 0;
+        
+        yellow.d = 0;
+        yellowLED = 0;
+        
+        orange.d = 0;
+        orangeLED = 0;
+        
+        purple.d = 0;
+        purpleLED = 0;
+        
+        green.d = 1;
+        greenLED =  1;
+        
+        white.d = 0;
+        whiteLED = 0;
+        
+        
+      3b100: //red
+        red.d = 1;
+        redLED = 1;
+        
+        blue.d = 0;
+        blueLED = 0;
+        
+        yellow.d = 0;
+        yellowLED = 0;
+        
+        orange.d = 0;
+        orangeLED = 0;
+        
+        purple.d = 0;
+        purpleLED = 0;
+        
+        green.d = 0;
+        greenLED = 0;
+        
+        white.d = 0;
+        whiteLED = 0;
+        
+      
+      3b101: //purple
+        red.d = 0;
+        redLED = 0;
+        
+        blue.d = 0;
+        blueLED = 0;
+        
+        yellow.d = 0;
+        yellowLED = 0;
+        
+        orange.d = 0;
+        orangeLED = 0;
+        
+        purple.d = 1;
+        purpleLED = 1;
+        
+        green.d = 0;
+        greenLED = 0;
+        
+        white.d = 0;
+        whiteLED = 0;
+        
+      
+      3b110: //orange
+        red.d = 0;
+        redLED = 0;
+        
+        blue.d = 0;
+        blueLED = 0;
+        
+        yellow.d = 0;
+        yellowLED = 0;
+        
+        orange.d = 1;
+        orangeLED = 1;
+        
+        purple.d = 0;
+        purpleLED = 0;
+        
+        green.d = 0;
+        greenLED = 0;
+        
+        white.d = 0;
+        whiteLED = 0;
+        
+     3b000: 
+        red.d = 1;
+        redLED = 1;
+        
+        blue.d = 1;
+        blueLED = 1;
+        
+        yellow.d = 1;
+        yellowLED = 1;
+        
+        orange.d = 1;
+        orangeLED = 1;
+        
+        purple.d = 1;
+        purpleLED = 1;
+        
+        green.d = 1;
+        greenLED = 1;
+        
+        white.d = 1;
+        whiteLED = 1;       
+      
+    default:
+        red.d = 0;
+        redLED = 0;
+        
+        blue.d = 0;
+        blueLED = 0;
+        
+        yellow.d = 0;
+        yellowLED = 0;
+        
+        orange.d = 0;
+        orangeLED = 0;
+        
+        purple.d = 0;
+        purpleLED = 0;
+        
+        green.d = 0;
+        greenLED = 0;
+        
+        white.d = 0;
+        whiteLED = 0;
+      
+    
+}
+}    
+}
