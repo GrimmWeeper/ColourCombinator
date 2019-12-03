@@ -6,7 +6,7 @@ module mojo_top (
     
     input clk,              // 50MHz clock
     input rst_n,            // reset button (active low)
-    input io_button [5],    // 5 buttons on IO Shield
+    input io_button[5],    // 5 buttons on IO Shield
     input io_dip[3][8],     //serves as inputs. array 2 will be input A values, array 1 will be input B values, array 0 will be ALUFN values
     
     
@@ -37,8 +37,6 @@ module mojo_top (
     edge_detector edge_red2(#RISE(1), #FALL(0)); // detect rising edges
     edge_detector edge_yellow2(#RISE(1), #FALL(0)); // detect rising edges
     
-    edge_detector edge_reset(#RISE(1), #FALL(0)); //for reset  
-    button_conditioner button_reset;
  
     button_conditioner button_blue1;     // button input conditioner
     button_conditioner button_red1;     // button input reset_conditioner
@@ -103,11 +101,10 @@ module mojo_top (
   const X = 23; // Constant used to control time before transitioning to next state
   const Y = 10; // Constant used to control ALU computation process
   
-  const S = 27; //CHECK constant used to track how fast the counter will count
+  const S = 27; //CHECK constant used to track how fast the counter will count for SOLOMODE
   
   //CHECK using external signal to track how long the solo mode will last for
-  //sig solotimer;
-  
+
   
   //internal signals of 16 bits a, b, alu
   sig alu[16];
@@ -122,7 +119,7 @@ module mojo_top (
   
   
   //Import counter and decoder module
-  counter color_cycle_cnt (#SIZE(3), #DIV(22), #TOP(6), .clk(clk), .rst(rst));
+  counter color_cycle_cnt (#SIZE(3), #DIV(25), #TOP(6), .clk(clk), .rst(rst));
   decoder color_cnt_dec (#WIDTH(3), .in(color_cycle_cnt.value));
   
  
@@ -147,9 +144,6 @@ module mojo_top (
     edge_yellow2.in = button_yellow2.out;
     edge_red2.in = button_red2.out;
     
-    button_reset.in = io_button[1];
-    edge_reset.in = button_reset.out;
-
     
     reset_cond.in = ~rst_n; // input raw inverted reset signal
     rst = reset_cond.out;   // conditioned reset
@@ -328,7 +322,7 @@ module mojo_top (
           state.d = state.P2STREAK;
           duocounter.d = 0;
         }
-        if(duocounter.q[X] == 1 && io_button[1] == 1){
+        if(duocounter.q[X] == 1 && io_button[2] == 1){
           state.d = state.DUOSCORE;
           duocounter.d = 0;
         }  
@@ -492,7 +486,7 @@ module mojo_top (
         
         duoseed.d = duoseed.q + 1;
         
-        if(duocounter.q[X] == 1 && io_button[1] == 1){
+        if(duocounter.q[X] == 1 && io_button[2] == 1){
           state.d = state.CHOOSEGAMEMODE;
           duocounter.d = 0;
         }
@@ -565,7 +559,7 @@ module mojo_top (
         }
         
         //RESET
-        if(io_button[1] == 1){
+        if(io_button[2] == 1){
           state.d = state.SOLOEND;
           solocounter.d = 0;
         }
@@ -672,7 +666,7 @@ module mojo_top (
         seg.values = {4h0,converterP1.digits[0],converterP1.digits[1],converterP1.digits[2]};
         
                
-        if(solocounter.q[X] == 1 && io_button[1] == 1){
+        if(solocounter.q[X] == 1 && io_button[2] == 1){
           state.d = state.CHOOSEGAMEMODE;
           duoseed.d = duoseed.q + 1;
           solocounter.d =0;
