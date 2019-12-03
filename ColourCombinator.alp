@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="ColourCombinator" board="Mojo" language="Lucid" version="2">
+  <files>
+    <src>boolean16b.luc</src>
+    <src>questionselector.luc</src>
+    <src top="true">mojo_top.luc</src>
+    <component>pipeline.luc</component>
+    <component>counter.luc</component>
+    <src>multi_seven_seg.luc</src>
+    <component>decoder.luc</component>
+    <src>compare16b.luc</src>
+    <src>seven_seg.luc</src>
+    <component>pn_gen.luc</component>
+    <component>bin_to_dec.luc</component>
+    <src>aluCompiled.luc</src>
+    <src>adder16b.luc</src>
+    <component>reset_conditioner.luc</component>
+    <src>shifter16b.luc</src>
+    <component>edge_detector.luc</component>
+    <component>button_conditioner.luc</component>
+    <constraint>user.ucf</constraint>
+    <constraint lib="true">mojo.ucf</constraint>
+  </files>
+</project>
