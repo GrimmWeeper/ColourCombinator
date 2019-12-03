@@ -13,4 +13,4 @@ Our game, “Colour Combinator”, is a fun play on colour mixing and reaction t
 Like its name, the leisure play mode is untimed. The game only progresses to the next level when a correct input is given. The scoring system remains the same as above. 
 
 ##### Rapid Fire
-Unlike the leisure play mode, rapid fire increases game difficulty by imposing a time limit on each game question. If neither players give the correct input before the time limit for that round, neither player is awarded points. The time limit for each question decreases (shorter answering period) as the game progresses. 
+Unlike the leisure play mode, rapid fire increases game difficulty by imposing a time limit on each game question. If the player gives the correct input before the time limit for that round, he or she will be awarded points. The time limit for each question decreases (shorter answering period) as the game progresses. 
