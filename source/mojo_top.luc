@@ -88,20 +88,21 @@ module mojo_top (
       dff p[4][16]; //p[0]: current score, p[1]: streak value, p[2]: answer, p[3]:temp
       dff soloqc[8]; //8 bits long question counter
       dff soloqnschoice[3]; //3bits long question choice for the next round
+      
+      dff speed; //Speed of SOLO GAME MODE
      
            
       
       //fsm states
-      fsm state = {CHOOSEGAMEMODE,
+      fsm state = {CHOOSEGAMEMODE,DUOSTART,
               DUOCOMPARE,P1STREAK,P1MULTIPLY,P1SCORE,P2RESET,P2STREAK,P2MULTIPLY,P2SCORE,P1RESET,DUOCHECKEND,DUOSCORE,DUOQNSGEN,
-              SOLOCOMPARE,SOLOSTREAK,SOLOMULTIPLY,SOLOUPDATESTREAK,SOLOSCORE,SOLOCHECKEND,SOLOEND,SOLOQNSGEN};
+              SOLOSTART,SOLOCOMPARE,SOLOSTREAK,SOLOMULTIPLY,SOLOUPDATESTREAK,SOLOSCORE,SOLOCHECKEND,SOLOEND,SOLOQNSGEN};
      
   }
   }
   const X = 23; // Constant used to control time before transitioning to next state
   const Y = 10; // Constant used to control ALU computation process
   
-  const S = 27; //CHECK constant used to track how fast the counter will count for SOLOMODE
   
   //CHECK using external signal to track how long the solo mode will last for
 
@@ -202,15 +203,6 @@ module mojo_top (
     solocounter.d = solocounter.q + 1; 
 
     
-    //in duo mode:
-    //io_led 0:7 to show colours output
-    //io_led 15:8 to show P2 input value
-    //io_led 23:16 to show P1 input value
-    
-    //in solo mode:
-    //io_led 0:7 to show colours output
-    //io_led 15:8 to show current streak
-    //io_led 23:16 to show current score
     
     io_led[2] = 8b0;
     io_led[1] = 8b0;
@@ -263,18 +255,37 @@ module mojo_top (
         io_led[0][6] = color_cnt_dec.out[6];
         
         
-        if(io_button[3] == 1){ //CHECK press the left button to enter solo mode  
-          state.d = state.SOLOCOMPARE;
+        if(io_button[3] == 1 || io_dip[2][0]){ //press the YELLOW button on P1 to enter solo mode or press left button on MOJO
+          state.d = state.SOLOSTART;
           solocounter.d = 0;
         }
-        else if(io_button[4] == 1){ //CHECK press the right button to enter duo mode  
-          state.d = state.DUOCOMPARE;
+        else if(io_button[4] == 1 || (io_dip[2][2] == 1 && io_dip[1][2] == 1)){ //press both P1 and P2 blue buttons or the right button on MOJO to enter duo mode  
+          state.d = state.DUOSTART;
           duocounter.d = 0;
         }
         
         
   
       //FOR ALL DUO STATES
+      state.DUOSTART:
+        seg.values = {4h0,4h0,4h0,4h0}; //show '000' on both 7 segment display
+        seg2.values = {4h0,4h0,4h0,4h0};
+        
+        //Display on all the LED
+        io_led[0][0] = 1;
+        io_led[0][1] = 1;
+        io_led[0][2] = 1;
+        io_led[0][3] = 1;
+        io_led[0][4] = 1;
+        io_led[0][5] = 1;
+        io_led[0][6] = 1;
+        
+        //START GAME
+        if (io_button[2] == 1) {
+          state.d = state.DUOCOMPARE;
+        }  
+        
+          
       state.DUOCOMPARE: //question will display and the players will answer. states moves on once a correct answer is logged
 
         duocounter.d = duocounter.q + 1;
@@ -322,6 +333,8 @@ module mojo_top (
           state.d = state.P2STREAK;
           duocounter.d = 0;
         }
+        
+        // RESET GAME    
         if(duocounter.q[X] == 1 && io_button[2] == 1){
           state.d = state.DUOSCORE;
           duocounter.d = 0;
@@ -512,7 +525,28 @@ module mojo_top (
         
      
         //CHECK SOLOMODE
-        //SOLOCOMPARE,SOLOSTREAK,SOLOMULTIPLY,SOLOSCORE,SOLOCHECKEND,SOLOEND,SOLOQNSGEN};
+        //SOLOSTART, SOLOCOMPARE,SOLOSTREAK,SOLOMULTIPLY,SOLOSCORE,SOLOCHECKEND,SOLOEND,SOLOQNSGEN};
+        
+      state.SOLOSTART:
+        seg.values = {4h0,4h0,4h0,4h0}; //show '000' on P1 7 segment display
+        seg2.values = {4hf,4hf,4hf,4hf};
+        
+        //Display on all the LED
+        io_led[0][0] = 1;
+        io_led[0][1] = 1;
+        io_led[0][2] = 1;
+        io_led[0][3] = 1;
+        io_led[0][4] = 1;
+        io_led[0][5] = 1;
+        io_led[0][6] = 1;
+        
+        speed.d = 27;
+        
+        //START GAME
+        if (io_button[2] == 1) {
+          state.d = state.SOLOCOMPARE;
+        }  
+                
         
       state.SOLOCOMPARE: 
       
@@ -530,15 +564,15 @@ module mojo_top (
         io_led[0][6] = soloSel.whiteLED;
         
 
-        //display the score and streak
+        //display P1 score
         io_led[2] = p.q[0]; //display score
         io_led[1] = p.q[1]; //display streak
         
         converterP1.value = p.q[0];
-        converterP2.value = p.q[1];
+
         
         seg.values = {4h0,converterP1.digits[0],converterP1.digits[1],converterP1.digits[2]};
-        seg2.values = {4h0,converterP2.digits[0],converterP2.digits[1],converterP2.digits[2]};        
+        seg2.values = {4hf,4hf,4hf,4hf};    
         
         //solo player manual input
         soloSel.playerSignal = io_dip[2][2:0]; 
@@ -547,13 +581,13 @@ module mojo_top (
         p.d[2] = soloSel.ans;       
         
         //Correct answer
-        if((p.q[2] == 1)  && solocounter.q[S] != 1){ //as long as the timer is not up and a valid value is read, calculate the score and 
+        if((p.q[2] == 1)  && solocounter.q[speed.q] != 1){ //as long as the timer is not up and a valid value is read, calculate the score and 
           state.d = state.SOLOSTREAK;
           solocounter.d = 0;       
         }
         
         //Miss the time  
-        else if (solocounter.q[S] == 1) {
+        else if (solocounter.q[speed.q] == 1) {
           state.d = state.SOLOUPDATESTREAK;
           solocounter.d = 0;
         }
@@ -628,11 +662,20 @@ module mojo_top (
           state.d = state.SOLOEND;
           solocounter.d = 0;
         }
+        
+        else if(solocounter.q[Y] == 1 && soloqc.q == 8b0001010) {
+          speed.d = speed.q - 1;
+          state.d = state.SOLOQNSGEN;
+          solocounter.d = 0;
+          soloqc.d = soloqc.q + 8b00000001;
+        }  
+              
         else if(solocounter.q[Y] == 1){
           state.d = state.SOLOQNSGEN;
           solocounter.d = 0;
           soloqc.d = soloqc.q + 8b00000001;
         }
+        
                
       state.SOLOQNSGEN:
       
@@ -664,6 +707,7 @@ module mojo_top (
         converterP1.value = p.q[0];
         
         seg.values = {4h0,converterP1.digits[0],converterP1.digits[1],converterP1.digits[2]};
+        seg2.values = {4hf,4hf,4hf,4hf};
         
                
         if(solocounter.q[X] == 1 && io_button[2] == 1){
